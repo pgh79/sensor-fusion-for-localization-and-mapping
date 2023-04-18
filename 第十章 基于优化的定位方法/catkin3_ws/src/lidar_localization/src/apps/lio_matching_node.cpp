@@ -28,6 +28,10 @@ int main(int argc, char *argv[]) {
 //This function creates an instance of ros::NodeHandle which will be used throughout the rest of this code snippet.
     ros::NodeHandle nh;
 
+/*
+* there are two variables created: one for subscribing to undistorted lidar measurements and publishing GNSS position; 
+* and one for running a matching flow every 100 milliseconds while waiting on ROS.
+*/
     // subscribe to:
     //     a. undistorted lidar measurements
     //     b. GNSS position
