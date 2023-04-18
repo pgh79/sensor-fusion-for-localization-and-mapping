@@ -244,6 +244,7 @@ bool DataPretreatFlow::ValidData() {
 
 //checks if the difference between the current time and the previous time is bigger than a certain range of values (in this case, 0.05).
 // If so, then that means the lidar data is much ahead than other sensor data, remove the first point cloud element and return false.
+    if (diff_imu_time > 0.05) {
         imu_data_buff_.pop_front();
         return false;
     }
@@ -258,7 +259,7 @@ bool DataPretreatFlow::ValidData() {
         return false;
     }
 
-// time difference is set to between -0.05 ~ 0.05, data are valid and the first element of buffer is used.
+// time difference is set to between -0.05 ~ 0.05, data are valid and the first element of buffer is sequncelly used and poped out with returing true.
 
     cloud_data_buff_.pop_front();
     imu_data_buff_.pop_front();
@@ -269,49 +270,90 @@ bool DataPretreatFlow::ValidData() {
 }
 
 bool DataPretreatFlow::TransformData() {
+// starts by creating a matrix4f object called gnss_pose_ and initializing it with the identity matrix.
+// starts by creating a reference pose matrix and then using the GNSS data to update the pose.
+// The first three dimensions of the pose are from the imu data, while the fourth dimension is from the gnss.
+
     // a. get reference pose:
     gnss_pose_ = Eigen::Matrix4f::Identity();
-    // get position from GNSS
-    current_gnss_data_.UpdateXYZ();
+    
+/*
+* 用GNSS数据（平移）和IMU（旋转）数据初始化位姿、更新位姿的两个函数为
+
+gnss_data.InitOriginPosition(); 
+gnss_data.UpdateXYZ();
+源码中表现
+
+void GNSSData::InitOriginPosition() {
+    geo_converter.Reset(latitude, longitude, altitude);
+    origin_position_inited = true;
+}
+
+void GNSSData::UpdateXYZ() {
+    if (!origin_position_inited) {
+        LOG(WARNING) << "GeoConverter has not set origin position";
+    }
+    geo_converter.Forward(latitude, longitude, altitude, local_E, local_N, local_U); // 经纬度高度，东北天
+}
+*/
+
+// get position from GNSS 更新gnss位置数据
+    current_gnss_data_.UpdateXYZ();  // ?? no definition of current_gnss_data_ in this function ??
+// the (1~3 rows,4th column) of gnss_pose_ matrix get the current gnss position data's E, N, U projection respectively
+// set the first column of our new matrix to be equal to current_gnss_data_.localE.
     gnss_pose_(0,3) = current_gnss_data_.local_E;
     gnss_pose_(1,3) = current_gnss_data_.local_N;
     gnss_pose_(2,3) = current_gnss_data_.local_U;
     // get orientation from IMU:
+    // continues by getting an orientation from IMU using GetOrientationMatrix().
+    // take the IMU's current orientation and convert it into a 3-dimensional matrix.
     gnss_pose_.block<3,3>(0,0) = current_imu_data_.GetOrientationMatrix();
     // this is lidar pose in GNSS/map frame:
+// the pointer lidar_to_imu_ point to gnss_pose_ 
     gnss_pose_ *= lidar_to_imu_;
 
     // b. set synced pos vel
+// the position xyz vector is gotten from current_gnss_data_ and velocity xyz vector is gotten from current_velocity_data_.linear_velocity
     pos_vel_.pos.x() = current_gnss_data_.local_E;
     pos_vel_.pos.y() = current_gnss_data_.local_N;
     pos_vel_.pos.z() = current_gnss_data_.local_U;
 
+//current_velocity_data_, an object that contains information about the robot's linear velocity and angular velocity??.
     pos_vel_.vel.x() = current_velocity_data_.linear_velocity.x;
     pos_vel_.vel.y() = current_velocity_data_.linear_velocity.y;
     pos_vel_.vel.z() = current_velocity_data_.linear_velocity.z;
 
     // c. motion compensation for lidar measurements:
-    current_velocity_data_.TransformCoordinate(lidar_to_imu_);
+// 该变换感觉是反了，是否应该改为lidar_to_imu_.inverse().
+// current_velocity_data_.TransformCoordinate(lidar_to_imu_);
+    current_velocity_data_.TransformCoordinate(lidar_to_imu_.inverse());
+// 0.1 ?? time?? with the even velocity hypothesis?? Set the motion model
     distortion_adjust_ptr_->SetMotionInfo(0.1, current_velocity_data_);
+// compensate the point cloud distortion , 转换后的参数用同一个名字
     distortion_adjust_ptr_->AdjustCloud(current_cloud_data_.cloud_ptr, current_cloud_data_.cloud_ptr);
 
     return true;
 }
 
 bool DataPretreatFlow::PublishData() {
-    // take lidar measurement time as synced timestamp:
+    // take lidar measurement time as synced timestamp: (linear interplotion)
+    // starts by getting the timestamp of the last time that data was synced
     const double &timestamp_synced = current_cloud_data_.time;
 
+// publish distortion adjusted cloud data, the first passed parameter is a pointer to avoid direct data copy
     cloud_pub_ptr_->Publish(current_cloud_data_.cloud_ptr, timestamp_synced);
+// current_imu_data_ is taken from imu data buffer's first element
     imu_pub_ptr_->Publish(current_imu_data_, timestamp_synced);
-
+// gnss position and imu(or 轮速计？？) linear velocity in synced timestamp
     pos_vel_pub_ptr_->Publish(pos_vel_, timestamp_synced);
     
     //
     // this synced odometry has the following info:
     //
-    // a. lidar frame's pose in map
+    // a. lidar frame's pose in map. (lidar_to_imu_??)
     // b. lidar frame's velocity 
+// gnss_pose_: 3x3 imu ratation, 3x1 gnss postion (lidar pose in GNSS/map frame??)
+// current_velocity_data_, an object that contains information about the robot's linear velocity and angular velocity??.
     gnss_pub_ptr_->Publish(gnss_pose_, current_velocity_data_, timestamp_synced);
 
     return true;
@@ -375,4 +417,54 @@ bool IMUData::SyncData(std::deque<IMUData>& UnsyncedData, std::deque<IMUData>& S
  
     return true;
 }
+*/
+
+/*
+bool DistortionAdjust::AdjustCloud(...)
+{
+    float orientation_space = 2.0 * M_PI;
+    float delete_space = 5.0 * M_PI / 180.0;
+    float start_orientation = atan2(origin_cloud_ptr->points[0].y, origin_cloud_ptr->points[0].x);
+
+    Eigen::AngleAxisf t_V(start_orientation, Eigen::Vector3f::UnitZ());
+    Eigen::Matrix3f rotate_matrix = t_V.matrix();
+    Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
+    transform_matrix.block<3,3>(0,0) = rotate_matrix.inverse();
+   pcl::transformPointCloud(*origin_cloud_ptr, *origin_cloud_ptr, transform_matrix);// 这边为什么要将 首个激光点 旋转到 雷达的X轴上去呢？
+    velocity_ = rotate_matrix * velocity_;// 没能明白您这里的线速度和角速度为什么还需要坐标变换，您能解释下吗，麻烦了。
+    angular_rate_ = rotate_matrix * angular_rate_;
+
+    for (size_t point_index = 1; point_index < origin_cloud_ptr->points.size(); ++point_index) {
+        float orientation = atan2(origin_cloud_ptr->points[point_index].y, origin_cloud_ptr->points[point_index].x);
+        if (orientation < 0.0)
+            orientation += 2.0 * M_PI;
+        
+        if (orientation < delete_space || 2.0 * M_PI - orientation < delete_space)
+            continue;
+
+        float real_time = fabs(orientation) / orientation_space * scan_period_ - scan_period_ / 2.0;
+
+        Eigen::Vector3f origin_point(origin_cloud_ptr->points[point_index].x,
+                                     origin_cloud_ptr->points[point_index].y,
+                                     origin_cloud_ptr->points[point_index].z);
+
+        Eigen::Matrix3f current_matrix = UpdateMatrix(real_time);
+        Eigen::Vector3f rotated_point = current_matrix * origin_point;
+        Eigen::Vector3f adjusted_point = rotated_point + velocity_ * real_time;
+        CloudData::POINT point;
+        point.x = adjusted_point(0);
+        point.y = adjusted_point(1);
+        point.z = adjusted_point(2);
+        output_cloud_ptr->points.push_back(point);
+    }
+
+    pcl::transformPointCloud(*output_cloud_ptr, *output_cloud_ptr, transform_matrix.inverse());
+    return true;
+}
+// 关于补畸变的事情，别的程序里的流程都是先找到起始点和终止点，然后检测角度是否旋转过半(halfpassed那个变量)，在一帧点云里，如果点的排列顺序是先列后行，那么没有问题，
+//只需要判断一次halfpassed就可以了，但是如果是先行后列，则需要判断64次，这个数据集里就属于后者，64次判断很难保证比较准，因为某一根线的部分区域没有返回值是很正常的现象。
+//如果都转到第一个点上去，那么就可以根据每个点所处的象限判断它的角度了，不需要判断halfpassed
+// 大概明白您的意思了，您看我理解有没有错。 但这样可能会带来一个问题。假如当中间某个点求出来的角度是1°，没有halfpassed，也就没法知道这个点到底是1°还是361°，也就没法判断这个点相对swap第一个点，雷达是转了1°还是361°。 
+// 所以您通过下面的判断，不对第一个点附近的点做处理。
+if (orientation < delete_space || 2.0 * M_PI - orientation < delete_space) continue;
 */
