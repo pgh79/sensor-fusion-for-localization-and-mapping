@@ -239,7 +239,8 @@ starts by initializing the odometry state.
 
         odometry_inited = true;
     }
-    
+
+ //   IMU pre-integration is updated and finally, current lidar odometry frame in map frame is set to this new value. 
     // update IMU pre-integration:
     UpdateIMUPreIntegration();
     
@@ -247,6 +248,22 @@ starts by initializing the odometry state.
     current_laser_odom_data_.pose = odom_init_pose * current_laser_odom_data_.pose;
 
     // optimization is carried out in map frame:
+/*
+* namespace lidar_localization {
+class SlidingWindow {
+  public:
+    SlidingWindow();
+
+    bool UpdateIMUPreIntegration(const IMUData &imu_data);
+    bool Update(
+      const PoseData &laser_odom,
+      const PoseData &map_matching_odom,
+      const IMUData &imu_data, 
+      const PoseData& gnss_pose
+    );
+    ...
+    }
+*/
     return sliding_window_ptr_->Update(
         current_laser_odom_data_, 
         current_map_matching_odom_data_,
@@ -255,7 +272,17 @@ starts by initializing the odometry state.
     );
 }
 
+/*
+The code is meant to illustrate that the sliding window flow is a publish-subscribe pattern.
+ The first thing that happens in the snippet is if there are new key frames, then they are published by calling GetLatestKeyFrame().
+ The next step is to call Publish() on the key frame's publisher which will send out a message to all subscribers for this particular key frame.
+ This allows other components of the system to be notified and take appropriate action.
+ Next, if there are new optimized data, then it will be published by calling GetLatestOptimizedOdometry(), which publishes an updated pose and time for each point in the map matching odometry stream.
+*/
+
 bool SlidingWindowFlow::PublishData() {
+// starts by checking if there is a new keyframe.
+// If so, it will get the latest keyframe and publish it to the appropriate data structures.
     if ( sliding_window_ptr_->HasNewKeyFrame() ) {        
         KeyFrame key_frame;
 
@@ -265,6 +292,9 @@ bool SlidingWindowFlow::PublishData() {
         sliding_window_ptr_->GetLatestKeyGNSS(key_frame);
         key_gnss_pub_ptr_->Publish(key_frame);
     }
+
+// checks if there is a new optimized frame.
+// If so, it gets the latest optimized odometry and publishes that to the appropriate data structure.
 
     if ( sliding_window_ptr_->HasNewOptimized() ) {
         KeyFrame key_frame;
