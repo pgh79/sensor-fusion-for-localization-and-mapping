@@ -310,6 +310,7 @@ void GNSSData::UpdateXYZ() {
     gnss_pose_.block<3,3>(0,0) = current_imu_data_.GetOrientationMatrix();
     // this is lidar pose in GNSS/map frame:
 // the pointer lidar_to_imu_ point to gnss_pose_ 
+// 从lidar坐标系转换到imu坐标系??
     gnss_pose_ *= lidar_to_imu_;
 
     // b. set synced pos vel
