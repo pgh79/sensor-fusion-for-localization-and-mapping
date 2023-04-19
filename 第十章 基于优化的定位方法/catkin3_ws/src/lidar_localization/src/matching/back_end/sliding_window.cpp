@@ -184,7 +184,7 @@ bool SlidingWindow::UpdateIMUPreIntegration(const IMUData &imu_data) {
     if ( !measurement_config_.source.imu_pre_integration || nullptr == imu_pre_integrator_ptr_ )
         return false;
    
-    // 
+    // verify the IMUPreIntegrator object's IsInited() is false and the return valuie of Update(imu_data) is true
     if (
         !imu_pre_integrator_ptr_->IsInited() ||
         imu_pre_integrator_ptr_->Update(imu_data)
@@ -195,14 +195,37 @@ bool SlidingWindow::UpdateIMUPreIntegration(const IMUData &imu_data) {
     return false;
 }
 
+/*
+input: 
+    const PoseData &laser_odom,
+    const PoseData &map_matching_odom,
+    const IMUData &imu_data, 
+    const PoseData& gnss_pose:  a pointer to another array of PoseData objects called gnss_pose that contains GPS coordinates for each frame in time-space.
+output: bool
+function: If there is a new keyframe, then the code needs to analyze it.
+ The analysis of a keyframe involves calculating various values related to the pose data.
+ If there is no new keyframe, then the code simply updates the laser_odom, map_matching_odom, and imu_data variables with the latest values from their respective sources.
+
+param: 
+            laser_odom, 
+            map_matching_odom,
+            imu_data,
+            gnss_pose
+  */ 
+ // The first variable is a pointer to an array of PoseData objects, which are created when the program starts and updated as needed.
+ // Next, there is a pointer to an IMUData object, which contains data about the user's orientation relative to their body.
+
 bool SlidingWindow::Update(
     const PoseData &laser_odom,
     const PoseData &map_matching_odom,
     const IMUData &imu_data, 
     const PoseData& gnss_pose
 ) {
+    // clear param to 0??
+    // start over and create new frames from scratch.
     ResetParam();
 
+// New keyframe means that something has changed so we need to create new frames from scratch again (i.e., start over).
     if ( 
         MaybeNewKeyFrame(
             laser_odom, 
@@ -211,6 +234,7 @@ bool SlidingWindow::Update(
             gnss_pose
         ) 
     ) {
+// Update() will update all four arrays with new values if they have changed since last frame; otherwise it does nothing.
         Update();
         MaybeOptimized();
     }
@@ -218,18 +242,28 @@ bool SlidingWindow::Update(
     return true;
 }
 
+// the SlidingWindow class manages a sliding window of key frames.
+// checks to see if there are any new key frames. If so, it gets the latest key frame.
+//
 bool SlidingWindow::HasNewKeyFrame() {
     return has_new_key_frame_;
 }
-
+//
+//checks to see if the current key frame has been optimized.
+// 
 bool SlidingWindow::HasNewOptimized() {
     return has_new_optimized_;
 }
 
+//updates the sliding window pointer and gets the latest optimized key frame.
+//
 void SlidingWindow::GetLatestKeyFrame(KeyFrame& key_frame) {
     key_frame = current_key_frame_;
 }
 
+// GetLatestKeyFrame(), GetLatestKeyGNSS(), and GetLatestOptimizedOdometry() functions all get the latestkeyframe orgnization 
+//from their respective data structures based on their arguments (current_key_frame for KeyFrame, current_key_gnss for KeyGnss, and current_optimal_odometry for OptimizedOdometry).
+//
 void SlidingWindow::GetLatestKeyGNSS(KeyFrame& key_frame) {
     key_frame = current_key_gnss_;
 }
@@ -238,19 +272,32 @@ void SlidingWindow::GetLatestOptimizedOdometry(KeyFrame& key_frame) {
     sliding_window_ptr_->GetLatestOptimizedKeyFrame(key_frame);
 }
 
+/*
+load all of the optimized key frames for the sliding window.
+ Once it has loaded all of the optimized key frames, it will insert them at the end of the key_frames_deque list.
+*/
 void SlidingWindow::GetOptimizedKeyFrames(std::deque<KeyFrame>& key_frames_deque) {
+// clears the key frames deque.
     key_frames_deque.clear();
     
     // load optimized key frames:
+// calls the sliding window's GetOptimizedKeyFrames method, passing in a std::deque of KeyFrame objects.
+// The GetOptimizedKeyFrames method returns a std::deque of KeyFrame objects that have been optimized for performance.
     sliding_window_ptr_->GetOptimizedKeyFrames(key_frames_.optimized);
-    
+
+
+// inserts the std::deque of optimized KeyFrame objects at the end of the key frames deque.
     key_frames_deque.insert(
         key_frames_deque.end(), 
         key_frames_.optimized.begin(), key_frames_.optimized.end()
     );
 }
 
+// saves the current pose of the window as a matrix4f.
 bool SlidingWindow::SavePose(std::ofstream& ofs, const Eigen::Matrix4f& pose) {
+// output 3x4 matrix of Matrix4f pose
+// at the last element, endl
+// others are separated by " ", space
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             ofs << pose(i, j);
@@ -273,7 +320,13 @@ bool SlidingWindow::SaveOptimizedTrajectory() {
         return false;
 
     // create output files:
+// creating three files.
+ //The first file is laser_odom_ofs, which will store the output of the optimization process.
+ //The second file is optimized_ofs, which will store the optimized trajectory.
+ //The third file is ground_truth_ofs, which will store the ground truth trajectory.
+ //
     std::ofstream laser_odom_ofs, optimized_ofs, ground_truth_ofs;
+// verify if it's created successfully
     if (
         !FileManager::CreateFile(laser_odom_ofs, trajectory_path_ + "/laser_odom.txt") ||
         !FileManager::CreateFile(optimized_ofs, trajectory_path_ + "/optimized.txt") ||
