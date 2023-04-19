@@ -9,24 +9,37 @@
 #include <pcl/io/pcd_io.h>
 #include "glog/logging.h"
 
+/*This defines all of the variables that will be used throughout this project 
+such as what type of data we're working with (LIDAR), how many samples per second our sensor can take, etc...
+*/
 #include "lidar_localization/global_defination/global_defination.h"
 #include "lidar_localization/tools/file_manager.hpp"
 
+//starts with a namespace declaration
 namespace lidar_localization {
 
+// declares a class called SlidingWindow and initializes an object of that class with default values.
 SlidingWindow::SlidingWindow() {
     InitWithConfig();
 }
 
+//  implementation of a function that loads the local configuration file.
 bool SlidingWindow::InitWithConfig() {
     //
-    // load lio localization backend config file:
-    //
+    // load lio localization backend config file: 
+    // starts by getting the data path from the config node. If it is a relative path, then it will be set to ./ and if not, it will be set to WORK_SPACE_PATH.
+    // create a string called config_file_path which will be used later in this function to load the configuration file for LIO localization from WORK_SPACE_.
+    // opens a config file that is located at WORK_SPACE_PATH + "/config/matching/sliding_window.yaml" and then loads it as an instance of a YAML node object named config_file_path
     std::string config_file_path = WORK_SPACE_PATH + "/config/matching/sliding_window.yaml";
+   // This path is then passed into YAML::LoadFile() which loads it as an instance of a YAML node object named config_.
     YAML::Node config_node = YAML::LoadFile(config_file_path);
-
+// prints out some text indicating successful completion of initialization.
     std::cout << "-----------------Init LIO Localization, Backend-------------------" << std::endl;
 
+/*
+The InitDataPath function needs an input parameter of type YAML::Node& which means that you can pass in any valid YAML::Node object as long as its name matches "data_path".
+ This is important because there are multiple nodes with different names that have the same value (e.g., "data" and "config").
+*/
     // a. estimation output path:
     InitDataPath(config_node);
     // b. key frame selection config:
@@ -40,41 +53,63 @@ bool SlidingWindow::InitWithConfig() {
 }
 
 bool SlidingWindow::InitDataPath(const YAML::Node& config_node) {
+// data_path是string格式的路径,
+//  gets the value of data path from the config node and assigns it into a variable called data_path.
     std::string data_path = config_node["data_path"].as<std::string>();
+// 如果读取到的data_path是相对路径./，则修改成绝对路径 WORK_SPACE_PATH
     if (data_path == "./") {
         data_path = WORK_SPACE_PATH;
     }
 
+// 创建data_path下的slam_data文件夹，失败则返回false
+//  calls FileManager::CreateDirectory() which will create an empty folder slam_data if one doesn't exist already.
+//  create a directory in the data_path, which is where all of the data files will be stored
     if (!FileManager::CreateDirectory(data_path + "/slam_data"))
         return false;
 
+//  creates a string called "trajectory_path_"
+// creates a new file called trajectory and saves it in the data_path.
+//  This file contains the estimated trajectory for each key frame that was created during the course of this application's execution
     trajectory_path_ = data_path + "/slam_data/trajectory";
+//  checks to see if the user has already created this directory or not, and if they haven't then it will create it for them.
     if (!FileManager::InitDirectory(trajectory_path_, "Estimated Trajectory"))
         return false;
 
     return true;
 }
 
-
+// analyzes the configuration node to determine how many key frames are needed for this slide window.
 bool SlidingWindow::InitKeyFrameSelection(const YAML::Node& config_node) {
     key_frame_config_.max_distance = config_node["key_frame"]["max_distance"].as<float>();
+//  sets up an interval that will be used to calculate when each frame should start and end.
     key_frame_config_.max_interval = config_node["key_frame"]["max_interval"].as<float>();
-
+// returns true if initialization was successful or false otherwise.    
     return true;
 }
 
+//  creating an instance of the SlidingWindow class, setting its configuration parameters, and returning true.
 bool SlidingWindow::InitSlidingWindow(const YAML::Node& config_node) {
     // init sliding window:
     const int sliding_window_size = config_node["sliding_window_size"].as<int>();
+    // creates a shared pointer to the CeresSlidingWindow class and sets some configuration options for it.
+    //  to store information about how many measurements are being taken by this window.
     sliding_window_ptr_ = std::make_shared<CeresSlidingWindow>(sliding_window_size);
 
+// specifies that the window will be using data from the config_node["measurements"]["map_matching"] variable as its source of matching data.
+ //  This means that when an input value matches with any of these values, it will be considered as a match and sent into the sliding window algorithm for processing.
     // select measurements:
+   
     measurement_config_.source.map_matching = config_node["measurements"]["map_matching"].as<bool>();
     measurement_config_.source.imu_pre_integration = config_node["measurements"]["imu_pre_integration"].as<bool>();
 
     // get measurement noises, pose:
-    measurement_config_.noise.lidar_odometry.resize(6);
+    /*
+     gets measurement noises from two different sources: lidar_odometry and map_matching.
+    The lidar_odometry noise is resized to have six values, while map_matching noise is resized to have six values as well.
+    */
+    measurement_config_.noise.lidar_odometry.resize(6); // 六个自由度，double类型噪声
     measurement_config_.noise.map_matching.resize(6);
+// gets and hold position noises from three different sources: gnss_position, lidar_odometry, and map_matching.
     for (int i = 0; i < 6; ++i) {
         measurement_config_.noise.lidar_odometry(i) =
             config_node["lidar_odometry"]["noise"][i].as<double>();
@@ -82,7 +117,8 @@ bool SlidingWindow::InitSlidingWindow(const YAML::Node& config_node) {
             config_node["map_matching"]["noise"][i].as<double>();
     }
 
-    // get measurement noises, position:
+// added noise
+    // get measurement noises, position:（经纬高）
     measurement_config_.noise.gnss_position.resize(3);
     for (int i = 0; i < 3; i++) {
         measurement_config_.noise.gnss_position(i) =
@@ -388,3 +424,56 @@ bool SlidingWindow::MaybeOptimized() {
 }
 
 } // namespace lidar_localization
+
+/*
+#
+# data output path:
+#
+data_path: ./
+
+#
+# key frame detection
+#
+key_frame:
+    # max. distance between two key frames:
+    max_distance: 0.25
+    # max. time interval between two key frames:
+    max_interval: 0.10
+
+#
+# sliding window size:
+#
+sliding_window_size: 15
+
+#
+# select measurements:
+# 
+measurements:
+    map_matching: true
+    imu_pre_integration: true
+
+#
+# measurement configs:
+#
+lidar_odometry:
+    noise: [1.0, 1.0, 1.0, 0.01, 0.01, 0.01] # x y z yaw roll pitch
+
+map_matching:
+    noise: [1.0, 1.0, 4.0, 0.01, 0.01, 0.01] # x y z yaw roll pitch
+
+gnss_position:
+    noise: [1.0, 1.0, 4.0] # x y z
+
+imu_pre_integration:
+    earth:
+        # gravity can be calculated from https://www.sensorsone.com/local-gravity-calculator/ using latitude and height:
+        gravity_magnitude: 9.80943
+    covariance:
+        measurement:
+            accel: 2.5e-3
+            gyro: 1.0e-4
+        random_walk:
+            accel: 1.0e-4
+            gyro: 1.0e-4
+
+*/
