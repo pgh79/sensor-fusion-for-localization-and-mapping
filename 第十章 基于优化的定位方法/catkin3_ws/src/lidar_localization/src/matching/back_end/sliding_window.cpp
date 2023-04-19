@@ -127,21 +127,64 @@ bool SlidingWindow::InitSlidingWindow(const YAML::Node& config_node) {
 
     return true;
 }
+/*
+imu_pre_integration:
+    earth:
+        # gravity can be calculated from https://www.sensorsone.com/local-gravity-calculator/ using latitude and height:
+        gravity_magnitude: 9.80943
+    covariance:
+        measurement:
+            accel: 2.5e-3
+            gyro: 1.0e-4
+        random_walk:
+            accel: 1.0e-4
+            gyro: 1.0e-4
+*/
 
+/*
+input: const YAML::Node& config_node
+output: bool
+function: if measurement: imu_pre_integration is true, set the imu_pre_integrator_ptr_ point to 
+                     store an instance of an IMUPreIntegrator object, and The parameter for this object is
+                      found from the configuration node "imu_pre_integration" that was passed into InitIMUPreIntegrator() .
+param:
+     const YAML::Node& config_node
+     imu_pre_integrator_ptr_
+     measurement_config_.source.imu_pre_integration
+     config_node["imu_pre_integration"]
+     IMUPreIntegrator
+*/
 bool SlidingWindow::InitIMUPreIntegrator(const YAML::Node& config_node) {
+  // declare a nullptr 
     imu_pre_integrator_ptr_ = nullptr;
-    
+
+// if measurement: imu_pre_integration is true
     if (measurement_config_.source.imu_pre_integration) {
+    // use  imu_pre_integrator_ptr_  to store an instance of an IMUPreIntegrator object.
+    // The parameter for this object is found from the configuration node that was passed into InitIMUPreIntegrator() .
         imu_pre_integrator_ptr_ = std::make_shared<IMUPreIntegrator>(config_node["imu_pre_integration"]);
     }
 
     return true;
 }
 
+/*
+input: const IMUData &imu_data
+output: bool
+function: first verifies that the measurement configuration has a source field set to "imu_pre_integration" and that the pre-integration function is not null.
+                    If either of these conditions are not met, then the code returns false.
+                    If both conditions are met, then the code calls the pre-integration function with the IMU data as an argument.
+param: 
+    const IMUData & imu_data
+     imu_pre_integrator_ptr_
+     measurement_config_.source.imu_pre_integration
+  */ 
 bool SlidingWindow::UpdateIMUPreIntegration(const IMUData &imu_data) {
+   // first verifies that the measurement configuration has a source field set to "imu_pre_integration" and that the pre-integration function is not null.
     if ( !measurement_config_.source.imu_pre_integration || nullptr == imu_pre_integrator_ptr_ )
         return false;
-    
+   
+    // 
     if (
         !imu_pre_integrator_ptr_->IsInited() ||
         imu_pre_integrator_ptr_->Update(imu_data)
