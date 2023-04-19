@@ -335,7 +335,7 @@ bool SlidingWindow::SaveOptimizedTrajectory() {
         return false;
     }
 
-    // load optimized key frames:
+    // load optimized key frames: input database
     sliding_window_ptr_->GetOptimizedKeyFrames(key_frames_.optimized);
 
     // write 
@@ -363,6 +363,7 @@ bool SlidingWindow::SaveOptimizedTrajectory() {
     return true;
 }
 
+// reset the two boolean variables - "has_new_key_frame_" and "has_new_optimized_" to false.
 void SlidingWindow::ResetParam() {
     has_new_key_frame_ = false;
     has_new_optimized_ = false;
@@ -374,20 +375,30 @@ bool SlidingWindow::MaybeNewKeyFrame(
     const IMUData &imu_data,
     const PoseData &gnss_odom
 ) {
+
+// creates a new KeyFrame object called last_key_frame.
+// This object will store the latest key frame in the key frame array.
+//
     static KeyFrame last_key_frame;
 
     // 
     // key frame selection for sliding window:
     // 
+// key_frames_.lidar, which stores an array of PoseData objects.
+// This array will hold the key frames for the sliding window analysis.
+// checks to see if there are any key frames in key_frames_.lidar.
+// If there are no key frames, then the code sets up an IMU pre-integrator to help with navigation and positioning during analysis.
     if ( key_frames_.lidar.empty() ) {
         // init IMU pre-integrator:
         if ( imu_pre_integrator_ptr_ ) {
             imu_pre_integrator_ptr_->Init(imu_data);
         }
-
+// 
         has_new_key_frame_ = true;
     } else if (
         // spatial:
+//  If there are any key frames, then the code starts by analyzing each pose in turn using laser_odom and map_matching_odom as input data points.
+// This is important because it will allow the code to use the IMU data in conjunction with GNSS data to create a more accurate 3D model of the environment.
         ( 
             laser_odom.pose.block<3,1>(0, 3) - 
             last_key_frame.pose.block<3,1>(0, 3) 
@@ -401,7 +412,7 @@ bool SlidingWindow::MaybeNewKeyFrame(
         if ( imu_pre_integrator_ptr_ ) {
             imu_pre_integrator_ptr_->Reset(imu_data, imu_pre_integration_); 
         }
-    
+
         has_new_key_frame_ = true;
     } else {
         has_new_key_frame_ = false;
@@ -409,10 +420,14 @@ bool SlidingWindow::MaybeNewKeyFrame(
 
     // if so:
     if ( has_new_key_frame_ ) {
-        // create key frame for lidar odometry, relative pose measurement:
+      // create key frame for lidar odometry, relative pose measurement:
+// time at which the current key frame was created.  
         current_key_frame_.time = laser_odom.time;
+// index of current_key_frame_ is taken from key frame's lidar point cloud's size
         current_key_frame_.index = key_frames_.lidar.size();
+// Pose of current_key_frame_ is taken from laser_odom.pose
         current_key_frame_.pose = laser_odom.pose;
+// vel of current_key_frame_ is taken and stored from gnss_odom.vel.v and w
         current_key_frame_.vel.v = gnss_odom.vel.v;
         current_key_frame_.vel.w = gnss_odom.vel.w;
 
@@ -420,6 +435,7 @@ bool SlidingWindow::MaybeNewKeyFrame(
 
         // create key frame for GNSS measurement, full LIO state:
         current_key_gnss_.time = current_key_frame_.time;
+// index 
         current_key_gnss_.index = current_key_frame_.index;
         current_key_gnss_.pose = gnss_odom.pose;
         current_key_gnss_.vel.v = gnss_odom.vel.v;
@@ -437,6 +453,9 @@ bool SlidingWindow::MaybeNewKeyFrame(
 }
 
 bool SlidingWindow::Update(void) {
+// tarts by initializing a static variable called last_key_frame.
+// This variable stores the most recent key frame in the sliding window.
+// The code then updates the current key frame based on the value of last_key_frame.
     static KeyFrame last_key_frame_ = current_key_frame_;
 
     //
@@ -451,7 +470,7 @@ bool SlidingWindow::Update(void) {
         sliding_window_ptr_->AddPRVAGParam(current_key_frame_, false);
     }
 
-    // get num. of vertices:
+    // get num. of vertices: 顶点的数量
     const int N = sliding_window_ptr_->GetNumParamBlocks();
     // get param block ID, current:
     const int param_index_j = N - 1;
@@ -509,6 +528,10 @@ bool SlidingWindow::Update(void) {
     return true;
 }
 
+/*
+If Optimize() succeeds in improving performance, then "has_new_optimized_" is set to false and the code returns from this method.
+ The code checks if the sliding window pointer has been optimized, and if so, returns true.
+*/
 bool SlidingWindow::MaybeOptimized() {    
     if ( sliding_window_ptr_->Optimize() ) {
         has_new_optimized_ = true;
