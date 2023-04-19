@@ -15,6 +15,7 @@ MatchingFlow::MatchingFlow(ros::NodeHandle& nh) {
     // subscribers:
     // 
     // a. undistorted Velodyne measurement: 
+    // 创建类CloudSubscriber的指针cloud_sub_ptr_，并实例化。
     cloud_sub_ptr_ = std::make_shared<CloudSubscriber>(nh, "/synced_cloud", 100000);
     // b. lidar pose in map frame:
     gnss_sub_ptr_ = std::make_shared<OdometrySubscriber>(nh, "/synced_gnss", 100000);
@@ -39,6 +40,11 @@ MatchingFlow::MatchingFlow(ros::NodeHandle& nh) {
 
 bool MatchingFlow::Run() {
     // update global map if necessary:
+    /*
+        starts by checking if the global map has been updated.
+    If it has, then the code will publish the new global map to all subscribers.
+    Next, it checks if there is a subscriber. if trur, the Matching class use GetGlobalMap() method to get new global map, the global_map_pub_ptr_ publish global map.
+    */ 
     if (
         matching_ptr_->HasNewGlobalMap() && 
         global_map_pub_ptr_->HasSubscribers()
