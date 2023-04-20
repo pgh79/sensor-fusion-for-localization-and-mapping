@@ -17,17 +17,28 @@
 
 namespace lidar_localization {
 
+// initialize a new instance of the CloudData class with default values.
+// And The global_map_ptr_(new CloudData::CLOUD()) is initialized with the new CloudData::CLOUD().
+// The local_map_ptr_(new CloudData::CLOUD()) is initialized with the same as well.
+// Then, current_scan_ptr_(new CloudData::CLOUD()) is also initialized with the same as well.
+
 Matching::Matching()
     : global_map_ptr_(new CloudData::CLOUD()),
       local_map_ptr_(new CloudData::CLOUD()),
       current_scan_ptr_(new CloudData::CLOUD()) 
 {
+    //sets up some initial values for this class and then calls ResetLocalMap(0, 0, 0).
     InitWithConfig();
 
     ResetLocalMap(0.0, 0.0, 0.0);
 }
 
+//
 bool Matching::InitWithConfig() {
+/*
+ loading the configuration file inclung parameter lists for LIO localization, frontend.
+ The config_file_path is defined as WORK_SPACE_PATH + "/config/matching/matching.yaml".
+*/    
     //
     // load lio localization frontend config file:
     // 
@@ -42,6 +53,7 @@ bool Matching::InitWithConfig() {
     // b. load global map:
     InitGlobalMap(config_node);
     // c. init lidar frontend for relative pose estimation:
+    // registration for odometry estimation
     InitRegistration(config_node, registration_ptr_);
     // d. init map matcher:
     InitScanContextManager(config_node);
@@ -49,6 +61,11 @@ bool Matching::InitWithConfig() {
     return true;
 }
 
+/*
+    Interface based : CloudFilterInterface
+    Downsampling a PointCloud using a VoxelGrid filter
+
+*/
 bool Matching::InitFilter(
     const YAML::Node &config_node, std::string filter_user, 
     std::shared_ptr<CloudFilterInterface>& filter_ptr
