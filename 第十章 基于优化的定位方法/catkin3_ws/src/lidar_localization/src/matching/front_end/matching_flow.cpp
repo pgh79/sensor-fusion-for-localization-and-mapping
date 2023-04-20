@@ -42,7 +42,7 @@ bool MatchingFlow::Run() {
     // update global map if necessary:
     /*
         starts by checking if the global map has been updated.
-    If it has, then the code will publish the new global map to all subscribers.
+    If it has a new global map, then the code will publish the new global map to all subscribers.
     Next, it checks if there is a subscriber. if trur, the Matching class use GetGlobalMap() method to get new global map, the global_map_pub_ptr_ publish global map.
     */ 
     if (
@@ -52,6 +52,7 @@ bool MatchingFlow::Run() {
         global_map_pub_ptr_->Publish( matching_ptr_->GetGlobalMap() );
     }
 
+// same as global map, update local map
     // update local map if necessary:
     if (
         matching_ptr_->HasNewLocalMap() && 
@@ -63,12 +64,14 @@ bool MatchingFlow::Run() {
     // read inputs:
     ReadData();
 
+// verifies the data is not empty and is valid, otherwise skip matching and continue to do nothing
     while( HasData() ) {
         if (!ValidData()) {
             LOG(INFO) << "Invalid data. Skip matching" << std::endl;
             continue;
         }
 
+// publish data if matching update succeeded
         if ( UpdateMatching() ) {
             PublishData();
         }
@@ -76,6 +79,11 @@ bool MatchingFlow::Run() {
 
     return true;
 }
+
+/*
+starts by reading the lidar measurements and reference pose into a buffer.
+ The code then returns true, indicating that it has successfully read data from the pipe.
+*/
 
 bool MatchingFlow::ReadData() {
     // pipe lidar measurements and reference pose into buffer:
@@ -85,6 +93,16 @@ bool MatchingFlow::ReadData() {
     return true;
 }
 
+/*
+starts by checking if the cloud data buffer is empty. 
+ If it is, then the function returns false.
+
+ it checks if the matching pointer has been initialized.
+ If it has not been initialized, then the function returns true.
+ 
+ Finally, it checks to see if there are any GNSS data buffers in memory and 
+ returns true or false depending on whether they are empty or not respectively.
+*/
 bool MatchingFlow::HasData() {
     if ( cloud_data_buff_.empty() )
         return false;
@@ -98,8 +116,17 @@ bool MatchingFlow::HasData() {
     return true;
 }
 
+/*
+
+*/
 bool MatchingFlow::ValidData() {
+// current_cloud_data_ stores the cloud buffer's first element
     current_cloud_data_ = cloud_data_buff_.front();
+
+// verifies whether the matching object reference is initialized 
+// if so, pop off the first element of cloud data buff off the stack
+// and clear gnss data buffer
+// then return true
 
     if  ( matching_ptr_->HasInited() ) {
         cloud_data_buff_.pop_front();
@@ -107,8 +134,15 @@ bool MatchingFlow::ValidData() {
         return true;
     }
 
+// if map is not initialized, current_gnss_data_ stores the first element of gnss_data_buff_ ??
     current_gnss_data_ = gnss_data_buff_.front();
 
+/*
+the following lines are checking the diff time between stored cloud data time and stored gnss data time, 
+and check whether it is between -0.05 ~ 0.05 as valid data
+if so , return true or false
+then gnss and cloud buffer pop off the first element off the stack
+*/
     double diff_time = current_cloud_data_.time - current_gnss_data_.time;
 
     //
@@ -130,6 +164,22 @@ bool MatchingFlow::ValidData() {
     return true;
 }
 
+/*
+    starts by checking if the matching_ptr has been initialized.
+ If not, it will try to initialize using a scan context query.
+    @param: current_cloud_data_
+    passed to : SetScanContextPose
+    if it worked, then call GetInitPose(), no param is passed. 
+    Matrix4f init_pose is created to store the output.
+
+    evaluate deviation from gnss/imu（measured）:
+    1. pose diff between init_pose and current_gnss_data_.pose
+    2. norm()
+
+    scan Context succeeded. printf deviation;
+
+    If scan context failed to set, then fall back to set GNSS/IMU pose which call SetGNSSPose passing current_gnss_data_.pose;
+*/
 bool MatchingFlow::UpdateMatching() {
     if (!matching_ptr_->HasInited()) {
         // first try to init using scan context query:
@@ -157,11 +207,19 @@ bool MatchingFlow::UpdateMatching() {
         }
     }
 
+// returns the return value (perhaps bool value) of Update
+// input current_cloud_data_, whether successfully updated laser_odometry_, map_matching_odometry_
     return matching_ptr_->Update(
         current_cloud_data_, 
         laser_odometry_, map_matching_odometry_
     );
 }
+
+// current_cloud_data_: pcl library, with timestamp, xyz, intensity etc.
+// How to sync timestamp??  Set a standard time?
+
+// if the UpdateMatching succeeded, then Publish timestap_synced and updated laser_odometry_, map_matching_odometry_
+// Also publish the output of GetCurrentScan()
 
 bool MatchingFlow::PublishData() {
     const double &timestamp_synced = current_cloud_data_.time;
