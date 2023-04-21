@@ -63,8 +63,10 @@ bool Matching::InitWithConfig() {
 
 /*
     Interface based : CloudFilterInterface
-    Downsampling a PointCloud using a VoxelGrid filter
+    Downsampling a PointCloud using a VoxelGrid filter with leaf size of xx mm.
+    The params are passed from matching.yaml file
 
+    remove the outliers
 */
 bool Matching::InitFilter(
     const YAML::Node &config_node, std::string filter_user, 
@@ -88,10 +90,13 @@ bool Matching::InitFilter(
 }
 
 bool Matching::InitLocalMapSegmenter(const YAML::Node& config_node) {
+//creates a BoxFilter object, which is an implementation of std::shared_ptr that stores the passed in YAML::Node.
+// Guess: create a box to segment a local map for matching to reduce resource consuming
     local_map_segmenter_ptr_ = std::make_shared<BoxFilter>(config_node);
     return true;
 }
 
+// Choose between "global_map filter", "frame_filter" or "local_map_filter (needed to call InitLocalMapSegmenter(config_node) first)" 
 bool Matching::InitPointCloudProcessors(const YAML::Node& config_node) {
     // prompt:
     LOG(INFO) << "\tInit Point Cloud Processors:" << std::endl;
@@ -110,6 +115,9 @@ bool Matching::InitPointCloudProcessors(const YAML::Node& config_node) {
     return true;
 }
 
+/*
+
+*/
 bool Matching::InitGlobalMap(const YAML::Node& config_node) {
     std::string map_path = config_node["map_path"].as<std::string>();
 
