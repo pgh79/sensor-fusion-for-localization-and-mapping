@@ -347,14 +347,28 @@ bool Matching::Update(
 // fabs() function in C++ returns the absolute value of the argument. It is defined in the cmath header file.
 // Mathematically, fabs(num) = |num|.
 
+/*
+需要解决的问题：
+如何自定义Vertex和Edge？
+如何选择Edge类型？一元还是二元？
+如何赋值信息矩阵？
+如何设置鲁棒核函数的阈值？
+如何选择Vertex设置为固定？
+如何边缘化以便稀疏化求解？
+如何处理优化结束后outliner？
+如何设置根据卡方分布的临界值表对Edge的chi2设置阈值？
+*/
+
     for (int i = 0; i < 3; i++) {
         if (
+// edge --- odometry
             fabs(laser_pose(i, 3) - edge.at(2 * i)) > 50.0 &&
             fabs(laser_pose(i, 3) - edge.at(2 * i + 1)) > 50.0
         ) {
             continue;
         }
-            
+
+// 
         ResetLocalMap(laser_pose(0,3), laser_pose(1,3), laser_pose(2,3));
         break;
     }
