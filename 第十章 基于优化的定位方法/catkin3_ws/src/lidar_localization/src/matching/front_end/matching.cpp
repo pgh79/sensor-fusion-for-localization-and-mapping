@@ -298,6 +298,24 @@ bool Matching::SetScanContextPose(const CloudData& init_scan) {
     return true;
 }
 
+/*
+class CloudData {
+  public:
+    using POINT = pcl::PointXYZ;
+    using CLOUD = pcl::PointCloud<POINT>;
+    using CLOUD_PTR = CLOUD::Ptr;
+
+  public:
+    CloudData()
+      :cloud_ptr(new CLOUD()) {
+    }
+
+  public:
+    double time = 0.0;
+    CLOUD_PTR cloud_ptr;
+};
+}
+*/
 // update the pose of the laser.
 bool Matching::Update(
     const CloudData& cloud_data, 
@@ -361,19 +379,23 @@ bool Matching::Update(
 
     for (int i = 0; i < 3; i++) {
         if (
-// edge --- odometry
+//  if laser_pose's xyz is away from edge's two points's xyz respectively > 50
+// in a box of 50 around edge's vertex
+
             fabs(laser_pose(i, 3) - edge.at(2 * i)) > 50.0 &&
             fabs(laser_pose(i, 3) - edge.at(2 * i + 1)) > 50.0
         ) {
             continue;
         }
 
-// 
+// if laser_pose xyz is inbox, reset LocalMap
+
         ResetLocalMap(laser_pose(0,3), laser_pose(1,3), laser_pose(2,3));
         break;
     }
 
     // init the map matching pose as laser pose:
+    // loop closure detection in cloud_data with laser_pose as an init_pose or map_matching_pose
     map_matching_pose = laser_pose;
     scan_context_manager_ptr_->DetectLoopClosure(cloud_data, map_matching_pose);
 
