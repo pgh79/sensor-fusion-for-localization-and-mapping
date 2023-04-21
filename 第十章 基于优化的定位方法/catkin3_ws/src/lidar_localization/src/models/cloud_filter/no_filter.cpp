@@ -12,7 +12,28 @@ NoFilter::NoFilter() {
 
 }
 
+/*
+class CloudData {
+  public:
+    using POINT = pcl::PointXYZ;
+    using CLOUD = pcl::PointCloud<POINT>;
+    using CLOUD_PTR = CLOUD::Ptr;
+
+  public:
+    CloudData()
+      :cloud_ptr(new CLOUD()) {
+    }
+
+  public:
+    double time = 0.0;
+    CLOUD_PTR cloud_ptr;
+};
+*/
+
 bool NoFilter::Filter(const CloudData::CLOUD_PTR& input_cloud_ptr, CloudData::CLOUD_PTR& filtered_cloud_ptr) {
+
+// no filter, get and output the raw input_cloud
+//
     filtered_cloud_ptr.reset(new CloudData::CLOUD(*input_cloud_ptr));
     return true;
 }
