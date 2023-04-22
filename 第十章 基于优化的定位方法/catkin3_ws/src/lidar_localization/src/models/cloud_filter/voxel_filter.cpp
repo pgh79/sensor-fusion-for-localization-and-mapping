@@ -41,8 +41,9 @@ bool VoxelFilter::SetFilterParam(float leaf_size_x, float leaf_size_y, float lea
 }
 
 /*
- input data and filter
+ input data and filter, output filtered_cloud
 */
+
 bool VoxelFilter::Filter(const CloudData::CLOUD_PTR& input_cloud_ptr, CloudData::CLOUD_PTR& filtered_cloud_ptr) {
     voxel_filter_.setInputCloud(input_cloud_ptr);
     voxel_filter_.filter(*filtered_cloud_ptr);

@@ -11,22 +11,43 @@
 
 namespace lidar_localization {
 
+// starts by creating a new G2O optimizer object.
+//  The constructor takes the solver type (in this case, "G2oGraphOptimizer") and a property 
+// that specifies the algorithm to be used (in this case, "solver_property").
+
 G2oGraphOptimizer::G2oGraphOptimizer(
     const std::string &solver_type
 ) {
+// starts by creating a new G2O optimizer object.
+// the optimizer's graph pointer is set to point at the newly created sparse optimizer object.
+
     graph_ptr_.reset(new g2o::SparseOptimizer());
 
+/*
+    工厂设计模式，创建g2o优化算法求解器 solver对象，参数有 solver_type, solver_property
+*/
     g2o::OptimizationAlgorithmFactory *solver_factory = g2o::OptimizationAlgorithmFactory::instance();
     g2o::OptimizationAlgorithmProperty solver_property;
+
     g2o::OptimizationAlgorithm *solver = solver_factory->construct(solver_type, solver_property);
+
+// 将 solver 对象传入 graph_ptr_->setAlgorithm（）
+
     graph_ptr_->setAlgorithm(solver);
 
     if (!graph_ptr_->solver()) {
         LOG(ERROR) << "Failed to create G2O optimizer!" << std::endl;
     }
+
+// robust 内核工厂模式 创建对象 
+
     robust_kernel_factory_ = g2o::RobustKernelFactory::instance();
 }
 
+/*
+    Set Edge robust_kernel name and size
+    protect the varibles
+*/
 void G2oGraphOptimizer::SetEdgeRobustKernel(
     std::string robust_kernel_name,
     double robust_kernel_size
@@ -35,6 +56,10 @@ void G2oGraphOptimizer::SetEdgeRobustKernel(
     robust_kernel_size_ = robust_kernel_size;
     need_robust_kernel_ = true;
 }
+
+/* 
+    edge 创建 robust_kernel_factory_ 的工厂模式
+*/
 
 void G2oGraphOptimizer::AddRobustKernel(g2o::OptimizableGraph::Edge *edge, const std::string &kernel_type, double kernel_size) {
     if (kernel_type == "NONE") {
@@ -51,19 +76,43 @@ void G2oGraphOptimizer::AddRobustKernel(g2o::OptimizableGraph::Edge *edge, const
     edge->setRobustKernel(kernel);
 }
 
+/*
+    starts by initializing the optimization process.
+*/
+
 bool G2oGraphOptimizer::Optimize() {
+
     static int optimize_cnt = 0;
+
+//   checks if the edges list is empty
 
     if(graph_ptr_->edges().size() < 1) {
         return false;
     }
 
+// If there are at least 1 edges in the graph, then it initializes all of the necessary variables and begins to optimize it.
+
+// First, it sets up a timer so that it can track how long the optimization process took.
+
     TicToc optimize_time;
+
+// 
 
     graph_ptr_->initializeOptimization();
     graph_ptr_->computeInitialGuess();
     graph_ptr_->computeActiveErrors();
     graph_ptr_->setVerbose(false);
+
+/*
+    computes and stores an estimate of how many iterations were needed to achieve a given level of improvement 
+*/
+
+/*
+    the Chi-Square Distribution(or Chi2, 𝜒2, or equivalently 𝜒21) is used to model the probability of the absolute value 
+    of the deviation of the measurement from it's expected value. This calculation is vital to tackle the measurement origin 
+    uncertainty problem. It can also be used to 
+    determine the "correctness" of a multi-hypothesis estimate using a similar idea, but I won't touch on that specifically.
+*/
 
     double chi2 = graph_ptr_->chi2();
 
@@ -81,21 +130,59 @@ bool G2oGraphOptimizer::Optimize() {
     return true;
 }
 
+/*
+    get vertices's number
+*/
+
 int G2oGraphOptimizer::GetNodeNum() {
     return graph_ptr_->vertices().size();
 }
 
 bool G2oGraphOptimizer::GetOptimizedPose(std::deque<Eigen::Matrix4f>& optimized_pose) {
+
+// first clears the optimized pose deque.
+
     optimized_pose.clear();
+
+// get vertices' number
+
     int vertex_num = graph_ptr_->vertices().size();
 
+// iterates over all of the vertices in the graph, and retrieves the estimated pose for each vertex.
+
     for (int i = 0; i < vertex_num; i++) {
+
+/*
+    dynamic_cast:
+        Safely converts pointers and references to classes up, down, and sideways along the inheritance hierarchy.
+    dynamic_cast< target-type >( expression )	
+    If the cast is successful, dynamic_cast returns a value of type target-type. If the cast fails and target-type is a pointer type,
+     it returns a null pointer of that type. If the cast fails and target-type is a reference type, 
+     it throws an exception that matches a handler of type std::bad_cast.
+*/
+
+/*
+    3D pose Vertex, (x,y,z,qw,qx,qy,qz) the parameterization for the increments constructed is a 6d vector (x,y,z,qx,qy,qz) 
+    (note that we leave out the w part of the quaternion
+*/
         g2o::VertexSE3* v = dynamic_cast<g2o::VertexSE3*>(graph_ptr_->vertex(i));
+
+// An isometric transformation (or isometry) is a shape-preserving transformation (movement) in the plane or in space. The isometric transformations
+// are reflection, rotation and translation and combinations of them such as the glide, which is the combination of a translation and a reflection.
+
         Eigen::Isometry3d pose = v->estimate();
+
+// cast：Performs explicit type conversion
+
+// store pose matrix into optimized_pose in deque data structure
         optimized_pose.push_back(pose.matrix().cast<float>());
     }
     return true;
 }
+
+/*
+    Add SE3 vertex node
+*/
 
 void G2oGraphOptimizer::AddSe3Node(
     const Eigen::Isometry3d &pose, const bool need_fix
@@ -111,6 +198,9 @@ void G2oGraphOptimizer::AddSe3Node(
     graph_ptr_->addVertex(vertex);
 }
 
+/*
+    Add Se3 Edge
+*/
 void G2oGraphOptimizer::AddSe3Edge(
     const int vertex_index1, const int vertex_index2,
     const Eigen::Isometry3d &relative_pose, const Eigen::VectorXd &noise
